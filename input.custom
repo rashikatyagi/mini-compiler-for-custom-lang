@@ -1,0 +1,12 @@
+integer x === 5;
+decimal pi === 3.14;
+string name === "Alice";
+
+x === 10;
+name === "Bob";
+pi === 3;
+
+y === 2;          // Error: y is not declared
+x === "hello";    // Error: type mismatch (x is integer, assigning string)
+
+

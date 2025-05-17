@@ -1,0 +1,56 @@
+<program>      ::= { <statement> }
+
+<statement>    ::= <variable_declaration> ";" 
+                 | <assignment> ";"
+                 | <if_statement>
+                 | <else_statement>
+                 | <while_loop>
+                 | <for_loop>
+
+<variable_declaration> ::= <type> <identifier> <assignment_operator> <expression>
+
+<assignment>   ::= <identifier> <assignment_operator> <expression>
+
+<if_statement> ::= "if" <quoted_condition> <block>
+
+<else_statement> ::= "else" <block>
+
+<while_loop>   ::= "while" <quoted_condition> <block>
+
+<for_loop>     ::= "for" <quoted_for_condition> <block>
+
+<block>        ::= "{" { <statement> } "}"
+
+<type>         ::= "integer" | "decimal" | "string"
+
+<assignment_operator> ::= "==="
+
+<quoted_condition> ::= '"' <condition_expression> '"'
+
+<quoted_for_condition> ::= '"' <for_init> "," <for_condition> "," <for_update> '"'
+
+<condition_expression> ::= <expression> ( <relational_operator> <expression> )?
+
+<for_init>     ::= <type> <identifier> <assignment_operator> <expression>
+
+<for_condition> ::= <expression> <relational_operator> <expression>
+
+<for_update>   ::= <identifier> ( "++" | "--" | <assignment_operator> <expression> )
+
+<expression>   ::= <term> { ("+" | "-") <term> }
+
+<term>         ::= <factor> { ("*" | "/") <factor> }
+
+<factor>       ::= <number> | <identifier> | "(" <expression> ")" | <string_literal>
+
+<relational_operator> ::= "<" | ">" | "<=" | ">=" | "==" | "!="
+
+<identifier>   ::= letter { letter | digit | "_" }
+
+<number>       ::= digit { digit } [ "." digit { digit } ]
+
+<string_literal> ::= '"' { any_character_except_quote } '"'
+
+letter        ::= "a" | ... | "z" | "A" | ... | "Z"
+
+digit         ::= "0" | ... | "9"
