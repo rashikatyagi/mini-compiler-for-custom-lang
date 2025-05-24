@@ -12,5 +12,13 @@ This project implements a mini compiler in C++ for a custom programming language
 - C++ compiler (e.g., g++)
 - C++17 or later recommended
 ## Build & Run
+### For error handling and intermediate code generation
+```bash
 g++ -std=c++17 lexer.cpp parser.cpp symbol_table.cpp main.cpp -o mini_compiler
 ./mini_compiler
+```
+### For assembly language generation
+```bash
+g++ asm_generator.cpp -o asmgen
+./asmgen
+```
