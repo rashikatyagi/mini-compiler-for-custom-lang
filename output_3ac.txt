@@ -1,0 +1,9 @@
+x = 5
+pi = 3.14
+name = Alice
+t0 = x < 7
+ifFalse t0 goto L1
+goto L0
+L0:
+print Hello
+L1:
