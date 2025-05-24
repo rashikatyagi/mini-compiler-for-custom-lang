@@ -1,0 +1,14 @@
+mov x, 5
+mov pi, 3.14
+mov name, "Alice"
+L0:
+mov eax, x
+cmp x, 7
+setl al
+movzx eax, al
+mov t0, eax
+cmp t0, 0
+je L1
+print "Hello"
+jmp L0
+L1:
