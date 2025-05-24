@@ -7,7 +7,6 @@ Parser::Parser(const std::vector<Token>& tokens) : tokens(tokens), current(0) {}
 Token Parser::peek() {
     if (current < tokens.size()) 
         return tokens[current];
-    // Return a dummy EOF token if out of range
     return Token(TokenType::END_OF_FILE, "");
 }
 
@@ -35,7 +34,11 @@ void Parser::error(const std::string& msg) {
 
 void Parser::parse() {
     program();
-    std::cout << "Parsing successful!" << std::endl;
+    std::cout << "Parsing successful!\n";
+
+    // After parsing, print and write the intermediate code
+    icg.printCode();
+    icg.writeToFile("output.tac");
 }
 
 void Parser::program() {
@@ -46,7 +49,7 @@ void Parser::program() {
 
 void Parser::statement() {
     if (check(TokenType::INTEGER_TYPE) || check(TokenType::DECIMAL_TYPE) || check(TokenType::STRING_TYPE)) {
-    varDeclaration();
+        varDeclaration();
     } else if (check(TokenType::IF)) {
         ifStatement();
     } else if (check(TokenType::WHILE)) {
@@ -63,7 +66,6 @@ void Parser::statement() {
 }
 
 void Parser::varDeclaration() {
-    // Determine and consume type token
     std::string type;
     if (check(TokenType::INTEGER_TYPE)) {
         type = "integer";
@@ -78,160 +80,172 @@ void Parser::varDeclaration() {
         error("Expected type");
     }
 
-    // Identifier
-    if (!check(TokenType::IDENTIFIER)) {
-        error("Expected identifier");
-    }
+    if (!check(TokenType::IDENTIFIER)) error("Expected identifier");
     std::string varName = peek().lexeme;
     advance();
 
-    // Check for ===
-    if (!match(TokenType::ASSIGN)) {
-        error("Expected ===");
-    }
+    if (!match(TokenType::ASSIGN)) error("Expected ===");
 
-    // Check value type
-    if (!check(TokenType::NUMBER) && !check(TokenType::STRING_LITERAL)) {
-        error("Expected value");
-    }
-
+    if (!check(TokenType::NUMBER) && !check(TokenType::STRING_LITERAL)) error("Expected value");
     std::string value = peek().lexeme;
     TokenType valueType = peek().type;
-    advance(); // consume value
+    advance();
 
-    // Type checking: Ensure assigned value matches declared type
-    if (type == "integer" || type == "decimal") {
-        if (valueType != TokenType::NUMBER) {
-            error("Type mismatch: Expected number");
-        }
-    } else if (type == "string") {
-        if (valueType != TokenType::STRING_LITERAL) {
-            error("Type mismatch: Expected string literal");
-        }
+    if ((type == "integer" || type == "decimal") && valueType != TokenType::NUMBER) {
+        error("Type mismatch: Expected number");
+    } else if (type == "string" && valueType != TokenType::STRING_LITERAL) {
+        error("Type mismatch: Expected string literal");
     }
 
-    // Semicolon
-    if (!match(TokenType::SEMICOLON)) {
-        error("Expected semicolon");
-    }
+    if (!match(TokenType::SEMICOLON)) error("Expected semicolon");
 
-    // Check for re-declaration
-    if (symTable.exists(varName)) {
-        error("Variable '" + varName + "' already declared");
-    }
-
-    // Add to symbol table
+    if (symTable.exists(varName)) error("Variable '" + varName + "' already declared");
     symTable.insert(varName, type);
+
+    icg.emit(varName, value, "=");
 }
 
 void Parser::assignment() {
     std::string varName;
 
-    // Expect and store the identifier
     if (check(TokenType::IDENTIFIER)) {
         varName = peek().lexeme;
-
-        // Semantic Check 1: Is variable declared?
-        if (!symTable.exists(varName)) {
-            error("Undeclared variable: " + varName);
-        }
-
-        advance(); // consume identifier
+        if (!symTable.exists(varName)) error("Undeclared variable: " + varName);
+        advance();
     } else {
         error("Expected variable name");
     }
 
-    // Match ===
-    if (!match(TokenType::ASSIGN)) {
-        error("Expected ===");
-    }
+    if (!match(TokenType::ASSIGN)) error("Expected ===");
 
-    // Now, check the type of the value being assigned
-    std::string assignedType;
+    std::string assignedType, value;
     if (check(TokenType::NUMBER)) {
-        const std::string& lex = peek().lexeme;
-        assignedType = (lex.find('.') != std::string::npos) ? "decimal" : "integer";
+        value = peek().lexeme;
+        assignedType = (value.find('.') != std::string::npos) ? "decimal" : "integer";
         advance();
     } else if (check(TokenType::STRING_LITERAL)) {
+        value = peek().lexeme;
         assignedType = "string";
         advance();
     } else {
         error("Unsupported assignment type");
     }
 
-    // Semantic Check 2: Type compatibility
     std::string declaredType = symTable.getType(varName);
     if (declaredType != assignedType) {
         error("Type mismatch in assignment to '" + varName + "': expected " + declaredType + ", got " + assignedType);
     }
 
-    // Expect semicolon
-    if (!match(TokenType::SEMICOLON)) {
-        error("Expected semicolon");
-    }
-}
+    if (!match(TokenType::SEMICOLON)) error("Expected semicolon");
 
+    icg.emit(varName, value, "=");
+}
 
 void Parser::ifStatement() {
     advance(); // consume 'if'
 
-    if (!match(TokenType::QUOTED_CONDITION) && !match(TokenType::STRING_LITERAL)) {
+    if (!check(TokenType::QUOTED_CONDITION) && !check(TokenType::STRING_LITERAL))
         error("Expected string condition");
-    }
 
+    std::string cond = peek().lexeme;
+    advance();
+
+    std::string trueLabel = icg.newLabel();
+    std::string falseLabel = icg.newLabel();
+    std::string endLabel = icg.newLabel();
+
+    std::string condTemp = icg.generateIfCondition(cond);
+    icg.emit("ifFalse", condTemp, "goto", falseLabel);
+    icg.emit("goto", trueLabel);
+
+    icg.emitLabel(trueLabel);
     block();
 
     if (match(TokenType::ELSE)) {
+        icg.emit("goto", endLabel);
+        icg.emitLabel(falseLabel);
         block();
+        icg.emitLabel(endLabel);
+    } else {
+        icg.emitLabel(falseLabel);
     }
 }
 
 void Parser::whileStatement() {
     advance(); // consume 'while'
 
-    if (!match(TokenType::QUOTED_CONDITION) && !match(TokenType::STRING_LITERAL)) {
+    if (!check(TokenType::QUOTED_CONDITION) && !check(TokenType::STRING_LITERAL))
         error("Expected string condition");
-    }
 
-    block();
+    std::string cond = peek().lexeme;
+    advance();
+
+    std::string startLabel = icg.newLabel();
+    std::string endLabel = icg.newLabel();
+
+    icg.generateWhileStart(startLabel);
+    icg.generateWhileCondition(cond, startLabel, endLabel);
+
+    block(); // the body of the while loop
+
+    icg.emit("goto", startLabel);  // jump back to condition
+    icg.emitLabel(endLabel);       // loop end
 }
+
 
 void Parser::forStatement() {
     advance(); // consume 'for'
 
-    if (!match(TokenType::QUOTED_CONDITION) && !match(TokenType::STRING_LITERAL)) {
+    if (!check(TokenType::QUOTED_CONDITION) && !check(TokenType::STRING_LITERAL))
         error("Expected for condition in string");
-    }
+
+    std::string cond = peek().lexeme;
+    advance();
+
+    // For simplicity: assume for-loop cond is like "x = 0; x < 10; x = x + 1"
+    // Parse init, condition, increment manually or assume separate statements. 
+    // Here we just emit condition checks and loop structure for demo:
+
+    std::string startLabel = icg.newLabel();
+    std::string endLabel = icg.newLabel();
+
+    icg.emitLabel(startLabel);
+    std::string condTemp = icg.generateIfCondition(cond);
+    icg.emit("ifFalse", condTemp, "goto", endLabel);
 
     block();
+
+    // Increment statement should be parsed from cond ideally, here omitted for brevity
+    icg.emit("goto", startLabel);
+    icg.emitLabel(endLabel);
 }
 
 void Parser::block() {
-    if (!match(TokenType::LBRACE)) {
-        error("Expected {");
-    }
+    if (!match(TokenType::LBRACE)) error("Expected {");
 
     while (!check(TokenType::RBRACE)) {
-        if (peek().type == TokenType::END_OF_FILE) {
-            error("Expected } before end of input");
-        }
+        if (peek().type == TokenType::END_OF_FILE) error("Expected } before end of input");
         statement();
     }
 
-    if (!match(TokenType::RBRACE)) {
-        error("Expected }");
-    }
+    if (!match(TokenType::RBRACE)) error("Expected }");
 }
 
 void Parser::printStatement() {
     advance(); // consume 'print'
 
-    if (!check(TokenType::STRING_LITERAL) && !check(TokenType::IDENTIFIER)) {
+    if (!check(TokenType::STRING_LITERAL) && !check(TokenType::IDENTIFIER))
         error("Expected string literal or variable");
-    }
+    
+    std::string toPrint = peek().lexeme;
     advance();
 
-    if (!match(TokenType::SEMICOLON)) {
-        error("Expected semicolon");
-    }
+    if (!match(TokenType::SEMICOLON)) error("Expected semicolon");
+
+    // Emit print statement intermediate code as: print toPrint
+    icg.emit("print", toPrint);
+}
+
+IntermediateCodeGenerator& Parser::getICG() {
+    return icg;
 }
